@@ -104,7 +104,7 @@ document.getElementById('generate-btn').addEventListener('click', async () => {
                                 renderFlightOptions([data.flights], numPax);
                             }
                             renderItinerary(data.itinerary, data.destination_review, numPax);
-                            renderLedger(data.split, data.itinerary, data.flights || (data.flight_options && data.flight_options[0]), numPax);
+                            renderLedger(data.split, data.itinerary, data.flights || (data.flight_options && data.flight_options[0]), numPax, data.budget_myr);
                             resultsSection.classList.remove('hidden');
 
                             let timeTaken = ((Date.now() - startTime) / 1000).toFixed(1);
@@ -493,7 +493,7 @@ function renderItinerary(itinerary, destinationReview, numPax) {
         const dayActivities = Array.isArray(day.activities) ? day.activities : [];
 
         // Mode icons for transport connectors
-        const modeIcon = { walk: '🚶', bus: '🚌', metro: '🚇', taxi: '🚕', ferry: '⛴️', tram: '🚊' };
+        const modeIcon = { walk: '🚶', bus: '🚌', metro: '🚇', taxi: '🚕', ferry: '⛴️', tram: '🚊', train: '🚆' };
 
         // Build activity list items + transport connectors
         let activitiesHtml = '';
@@ -592,6 +592,34 @@ function renderItinerary(itinerary, destinationReview, numPax) {
         const dayFoodTotal = foodCostPerPax * numPax;
         const dayTransTotal = transCostPerPax * numPax;
 
+        // Build transit summary from all activity transport_to_next entries
+        let transitModes = {};
+        let transitTotalCost = 0;
+        dayActivities.forEach(act => {
+            const tn = act.transport_to_next;
+            if (tn && tn.mode) {
+                const mode = tn.mode.toLowerCase();
+                if (!transitModes[mode]) transitModes[mode] = { count: 0, cost: 0, notes: [] };
+                transitModes[mode].count++;
+                transitModes[mode].cost += (tn.estimated_cost_myr || 0);
+                if (tn.notes && !transitModes[mode].notes.includes(tn.notes)) {
+                    transitModes[mode].notes.push(tn.notes);
+                }
+                transitTotalCost += (tn.estimated_cost_myr || 0);
+            }
+        });
+        let transitSummaryHtml = '';
+        const modeEntries = Object.entries(transitModes);
+        if (modeEntries.length > 0) {
+            transitSummaryHtml = '<div style="font-size:0.8em; margin:4px 0; color:var(--text-secondary);">';
+            modeEntries.forEach(([mode, info]) => {
+                const icon = modeIcon[mode] || '➡️';
+                const notesStr = info.notes.length > 0 ? ` (${info.notes.join(', ')})` : '';
+                transitSummaryHtml += `<div>${icon} ${mode}${notesStr} × ${info.count} — RM ${info.cost}</div>`;
+            });
+            transitSummaryHtml += '</div>';
+        }
+
         card.innerHTML = `
             <h4>Day ${dayNum}: ${dayLocation}</h4>
             <ul>${activitiesHtml}</ul>
@@ -613,6 +641,7 @@ function renderItinerary(itinerary, destinationReview, numPax) {
                 <div class="module-box">
                     <h5>Transit</h5>
                     <p>${transRoute}</p>
+                    ${transitSummaryHtml}
                     <span class="cost-tag">RM ${transCostPerPax}/pax/day</span>
                     <span style="font-size:0.75em; color:var(--text-secondary);">Total: RM ${dayTransTotal}</span>
                 </div>
@@ -624,10 +653,10 @@ function renderItinerary(itinerary, destinationReview, numPax) {
 
 let currentTripData = null;
 
-function renderLedger(split, itinerary, flights, numPax) {
+function renderLedger(split, itinerary, flights, numPax, budgetMyr) {
     numParticipants = numPax;
     if (!split || !split.primary_currency) return;
-    currentTripData = { split, itinerary, flights, numPax };
+    currentTripData = { split, itinerary, flights, numPax, budgetMyr };
     // Display total that will be reconciled when modal opens
     document.getElementById('total-cost').innerText = `RM ${split.total_myr} (${numPax} pax)`;
     document.getElementById('split-person').innerText = `RM ${split.split_per_person_myr}`;
@@ -670,6 +699,25 @@ function populateAccountingTable(data) {
     document.getElementById('acc-total').innerText = `RM ${grandTotal} (${n} pax)`;
     // Also update the summary card total to match
     document.getElementById('total-cost').innerText = `RM ${grandTotal} (${n} pax)`;
+
+    // Recalculate budget banner to match accounting total (fix mismatch)
+    const budgetLimit = data.budgetMyr || 0;
+    if (budgetLimit > 0) {
+        const surplus = budgetLimit - grandTotal;
+        const banner = document.getElementById('budget-banner');
+        const status = document.getElementById('budget-status');
+        const message = document.getElementById('budget-message');
+        banner.classList.remove('hidden', 'success', 'warning');
+        if (surplus >= 0) {
+            banner.classList.add('success');
+            status.innerText = 'Budget Looks Good';
+            message.innerText = `Group total: RM ${grandTotal.toLocaleString()} (${n} pax). Budget: RM ${budgetLimit.toLocaleString()} → Surplus RM ${surplus.toLocaleString()}.`;
+        } else {
+            banner.classList.add('warning');
+            status.innerText = 'Budget Alert';
+            message.innerText = `Group total: RM ${grandTotal.toLocaleString()} (${n} pax). Budget: RM ${budgetLimit.toLocaleString()} → Deficit RM ${Math.abs(surplus).toLocaleString()}.`;
+        }
+    }
 }
 
 // Live card preview
@@ -727,90 +775,6 @@ document.getElementById('settle-btn').addEventListener('click', async () => {
             document.getElementById('budget-modal').classList.remove('hidden');
         }
     }, 2000);
-});
-
-// PDF Generation - creates a compact print-friendly clone
-document.getElementById('download-pdf-btn').addEventListener('click', () => {
-    const source = document.getElementById('results-section');
-
-    // Create a compact clone for PDF
-    const clone = source.cloneNode(true);
-    clone.id = 'pdf-print-area';
-    clone.style.cssText = 'position:absolute; left:0; top:0; z-index:-9999; width:700px; font-size:11px; line-height:1.3; padding:10px; background:white;';
-    clone.classList.remove('hidden');
-
-    // Remove interactive elements from clone
-    clone.querySelectorAll('iframe, .settlement-ui, .action-buttons-row, .flight-detail-link, .module-link, .source-link, .dest-map-link, .response-time-badge, button, input[type="radio"]').forEach(el => el.remove());
-
-    // Shrink all card padding in clone
-    clone.querySelectorAll('.glass-card').forEach(el => {
-        el.style.cssText = 'padding:10px; margin-bottom:8px; border-radius:8px; border:1px solid #ddd; background:white; box-shadow:none;';
-    });
-    clone.querySelectorAll('.day-card').forEach(el => {
-        el.style.cssText = 'padding:8px 10px; margin-bottom:6px; border-radius:6px; border:1px solid #eee; background:#fafafa;';
-    });
-    clone.querySelectorAll('.daily-modules').forEach(el => {
-        el.style.cssText = 'display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; margin-top:6px; padding-top:6px; border-top:1px solid #eee;';
-    });
-    clone.querySelectorAll('.module-box').forEach(el => {
-        el.style.cssText = 'padding:6px; border-radius:4px; border:1px solid #eee; background:#f8f8f8; font-size:10px;';
-    });
-    clone.querySelectorAll('.budget-banner').forEach(el => {
-        el.style.cssText = 'padding:8px 12px; border-radius:6px; margin-bottom:8px; font-size:11px;';
-    });
-    clone.querySelectorAll('.destination-review').forEach(el => {
-        el.style.cssText = 'padding:8px 10px; margin-bottom:6px; border-radius:6px; font-size:11px;';
-    });
-    clone.querySelectorAll('.flight-option-row').forEach(el => {
-        el.style.cssText = 'padding:6px 8px; border:1px solid #ddd; border-radius:6px; margin-bottom:4px; background:#fafafa;';
-    });
-    clone.querySelectorAll('.flight-legs').forEach(el => {
-        el.style.cssText = 'display:flex; gap:12px; margin-top:4px;';
-    });
-    clone.querySelectorAll('.flight-pricing').forEach(el => {
-        el.style.cssText = 'margin-top:2px;';
-    });
-    clone.querySelectorAll('.split-info').forEach(el => {
-        el.style.cssText = 'display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; margin-bottom:8px;';
-    });
-    clone.querySelectorAll('.stat-box').forEach(el => {
-        el.style.cssText = 'padding:6px; border-radius:6px; text-align:center; border:1px solid #eee;';
-    });
-    clone.querySelectorAll('.stat-box h3').forEach(el => {
-        el.style.cssText = 'font-size:14px; font-weight:700;';
-    });
-    clone.querySelectorAll('h2').forEach(el => {
-        el.style.cssText = 'font-size:14px; margin-bottom:4px; font-weight:600;';
-    });
-    clone.querySelectorAll('h4').forEach(el => {
-        el.style.cssText = 'font-size:12px; margin-bottom:3px; font-weight:600;';
-    });
-    clone.querySelectorAll('li').forEach(el => {
-        el.style.cssText = 'padding:3px 0 3px 10px; font-size:10px; border-bottom:1px solid #f0f0f0;';
-    });
-    clone.querySelectorAll('.cost-tag').forEach(el => {
-        el.style.cssText = 'display:inline; font-size:9px; padding:1px 4px; background:rgba(0,113,227,0.1); color:#0071e3; border-radius:3px; font-weight:600;';
-    });
-    clone.querySelectorAll('.flight-disclaimer').forEach(el => {
-        el.style.cssText = 'font-size:9px; color:#888; font-style:italic; margin-top:4px; padding-top:4px; border-top:1px dashed #ddd;';
-    });
-
-    document.body.appendChild(clone);
-
-    const opt = {
-        margin: [0.3, 0.3, 0.3, 0.3],
-        filename: 'DaddiesTrip_Itinerary.pdf',
-        image: { type: 'jpeg', quality: 0.92 },
-        html2canvas: { scale: 1.2, useCORS: true, windowWidth: 700, logging: false },
-        jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' },
-        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
-    };
-
-    html2pdf().set(opt).from(clone).save().then(() => {
-        document.body.removeChild(clone);
-    }).catch(() => {
-        if (document.body.contains(clone)) document.body.removeChild(clone);
-    });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

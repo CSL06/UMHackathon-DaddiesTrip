@@ -26,23 +26,59 @@ class OrchestratorAgent:
         num_match = re.search(r'(\d+)\s*(?:adult|person|people|pax)', prompt, re.IGNORECASE)
         num_pax = int(num_match.group(1)) if num_match else len(itinerary_draft.get("participants", [])) or 1
 
-        budget_match = re.search(r'RM\s*(\d+(?:,\d+)?k?|\d+)', prompt, re.IGNORECASE)
-        budget_str = budget_match.group(1).replace(',', '') if budget_match else "5000"
-        if budget_str.lower().endswith('k'):
-            budget_myr = int(budget_str[:-1]) * 1000
+        # Budget parsing — support "RM20k", "budget is 20k", "20000 budget", "budget of RM 5,000"
+        budget_myr = 5000  # default
+        budget_patterns = [
+            r'RM\s*([\d,]+(?:\.\d+)?)\s*k\b',           # RM20k, RM 20k
+            r'RM\s*([\d,]+(?:\.\d+)?)',                   # RM20000, RM 5,000
+            r'budget\s+(?:is|of|around|about|:)?\s*(?:RM\s*)?([\d,]+(?:\.\d+)?)\s*k\b',  # budget is 20k
+            r'budget\s+(?:is|of|around|about|:)?\s*(?:RM\s*)?([\d,]+(?:\.\d+)?)',          # budget is 20000
+            r'([\d,]+)\s*k?\s*(?:budget|ringgit|myr)',    # 20k budget, 20000 myr
+        ]
+        for pat in budget_patterns:
+            m = re.search(pat, prompt, re.IGNORECASE)
+            if m:
+                val = m.group(1).replace(',', '')
+                try:
+                    budget_myr = float(val)
+                    # Check if the match was for a 'k' pattern
+                    if 'k' in pat or (m.end() < len(prompt) and prompt[m.end():m.end()+1].lower() == 'k'):
+                        budget_myr = budget_myr * 1000
+                    elif budget_myr < 100:
+                        # e.g. "budget is 20" likely means 20k
+                        budget_myr = budget_myr * 1000
+                    budget_myr = int(budget_myr)
+                except ValueError:
+                    budget_myr = 5000
+                break
+
+        # Extract travel dates/month from prompt
+        travel_date_str = ""
+        months = r'(?:january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)'
+        date_match = re.search(r'(?:in|during|depart(?:ing)?(?:\s+in)?|around|for)\s+(' + months + r'(?:\s+\d{4})?)', prompt, re.IGNORECASE)
+        if date_match:
+            travel_date_str = date_match.group(1).strip()
         else:
-            try:
-                budget_myr = int(budget_str)
-            except ValueError:
-                budget_myr = 5000
+            date_match2 = re.search(r'(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})', prompt)
+            if date_match2:
+                travel_date_str = date_match2.group(1)
+            else:
+                rel_match = re.search(r'(next\s+(?:week|month)|this\s+(?:month|' + months + r'))', prompt, re.IGNORECASE)
+                if rel_match:
+                    travel_date_str = rel_match.group(1)
+
+        # Extract trip duration from prompt
+        dur_match = re.search(r'(\d+)\s*[-–]?\s*days?', prompt, re.IGNORECASE)
+        duration = int(dur_match.group(1)) if dur_match else len(itinerary)
 
         return {
             "destination": destination,
-            "duration_days": len(itinerary),
+            "duration_days": duration,
             "participants": num_pax,
             "budget_myr": budget_myr,
             "depart_from": "KUL",
             "requires_flight": itinerary_draft.get("requires_flight", True),
+            "travel_dates": travel_date_str,
         }
 
     @staticmethod
@@ -262,6 +298,27 @@ class OrchestratorAgent:
         )
         final_total = budget_result["estimated_total_cost_myr"]
 
+        # ── Build split object for frontend ledger ────────────────────────────────
+        dest_currency = booking_result.get("destination_currency", "MYR")
+        # Rough MYR-to-destination conversion rates
+        fx_rates = {
+            "JPY": 33.0, "KRW": 290.0, "THB": 7.5, "SGD": 0.29, "IDR": 3400.0,
+            "VND": 5200.0, "TWD": 6.9, "PHP": 12.2, "USD": 0.21, "EUR": 0.20,
+            "GBP": 0.17, "AUD": 0.33, "CNY": 1.55, "HKD": 1.66, "INR": 17.8,
+            "AED": 0.78, "MYR": 1.0,
+        }
+        fx = fx_rates.get(dest_currency, 1.0)
+        per_person_myr = round(final_total / max(num_participants, 1))
+        per_person_local = round(per_person_myr * fx, 2)
+
+        split = {
+            "primary_currency": "MYR",
+            "destination_currency": dest_currency,
+            "total_myr": final_total,
+            "split_per_person_myr": per_person_myr,
+            "split_per_person_local": per_person_local,
+        }
+
         # ── Step 4: Edge Agent (Python-only, instant) ─────────────────────────────
         full_data = {
             "itinerary": merged_itinerary,
@@ -269,12 +326,14 @@ class OrchestratorAgent:
             "flights": cheapest_flight,
             "num_participants": num_participants,
             "participants": participants_raw,
-            "destination_currency": booking_result.get("destination_currency", "MYR"),
+            "destination_currency": dest_currency,
             "destination_iata": booking_result.get("destination_iata", ""),
             "destination_review": booking_result.get("destination_review"),
             "estimated_total_cost_myr": final_total,
             "budget_recommendation": budget_result.get("budget_recommendation", {}),
+            "budget_myr": budget_limit_myr,
             "saving_tips": budget_result.get("saving_tips", []),
+            "split": split,
         }
 
         validated_data = self.edge.validate(full_data)
