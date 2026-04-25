@@ -346,23 +346,8 @@ export default function App() {
   };
 
   const getGrandTotal = () => {
-    let hotelTotal = 0, foodTotal = 0, transTotal = 0, actTotal = 0;
-    itinerary.forEach(day => {
-      hotelTotal += (day.hotel ? (day.hotel.cost_myr || 0) : 0) * numPax;
-      foodTotal += (day.daily_food_cost_myr || 0) * numPax;
-      transTotal += (day.transportation ? (day.transportation.cost_myr || 0) : 0) * numPax;
-      if (day.activities) {
-        day.activities.forEach(act => {
-          actTotal += (act.cost_myr || 0) * numPax;
-          if (act.transport_to_next) {
-            transTotal += (act.transport_to_next.estimated_cost_myr || 0) * numPax;
-          }
-        });
-      }
-    });
-    const flightCostPerPax = flightOptions[selectedFlightIdx] ? (flightOptions[selectedFlightIdx].cost_myr || 0) : 0;
-    const flightCostTotal = flightCostPerPax * numPax;
-    return Math.round(flightCostTotal + hotelTotal + foodTotal + transTotal + actTotal);
+    const b = getExpensesBreakdown();
+    return b.total;
   };
 
   const PILL_MAP = {
@@ -405,15 +390,50 @@ export default function App() {
   };
 
   const getExpensesBreakdown = () => {
-    let hotel = 0, food = 0, trans = 0, act = 0;
+    // Per-pax costs: flight, food, activities, activity transport
+    // Shared costs: hotel (room, not per person), day transport
+    let hotelTotal = 0; // shared — per night, not per pax
+    let foodPerPax = 0;
+    let transTotal = 0; // shared — day-level transport
+    let transPerPax = 0; // activity-to-activity transport
+    let actPerPax = 0;
+
     itinerary.forEach(day => {
-      hotel += (day.hotel ? (day.hotel.cost_myr || 0) : 0) * numPax;
-      food += (day.daily_food_cost_myr || 0) * numPax;
-      trans += (day.transportation ? (day.transportation.cost_myr || 0) : 0) * numPax;
-      if (day.activities) day.activities.forEach(a => act += (a.cost_myr || 0) * numPax);
+      hotelTotal += (day.hotel?.cost_myr || 0);
+      foodPerPax += (day.daily_food_cost_myr || 0);
+      transTotal += (day.transportation?.cost_myr || 0);
+      if (day.activities) {
+        day.activities.forEach(a => {
+          actPerPax += (a.cost_myr || 0);
+          transPerPax += (a.transport_to_next?.estimated_cost_myr || 0);
+        });
+      }
     });
-    const flight = (flightOptions[selectedFlightIdx]?.cost_myr || 0) * numPax;
-    return { flight, hotel, food, trans, act, total: flight + hotel + food + trans + act };
+
+    const flightPerPax = flightOptions[selectedFlightIdx]?.cost_myr || 0;
+
+    // Total per person = flight + food + activities + activity transport + (hotel / numPax)
+    const hotelPerPax = numPax > 0 ? hotelTotal / numPax : hotelTotal;
+    const dayTransPerPax = numPax > 0 ? transTotal / numPax : transTotal;
+    const totalPerPax = flightPerPax + hotelPerPax + foodPerPax + dayTransPerPax + transPerPax + actPerPax;
+
+    // Group total
+    const flightGroup = flightPerPax * numPax;
+    const hotelGroup = hotelTotal; // already total for rooms
+    const foodGroup = foodPerPax * numPax;
+    const transGroup = transTotal + transPerPax * numPax; // shared day trans + per-pax activity trans
+    const actGroup = actPerPax * numPax;
+    const grandTotal = Math.round(flightGroup + hotelGroup + foodGroup + transGroup + actGroup);
+
+    return {
+      flight: { perPax: Math.round(flightPerPax), total: Math.round(flightGroup) },
+      hotel:  { perPax: Math.round(hotelPerPax), total: Math.round(hotelGroup) },
+      food:   { perPax: Math.round(foodPerPax), total: Math.round(foodGroup) },
+      trans:  { perPax: Math.round(dayTransPerPax + transPerPax), total: Math.round(transGroup) },
+      act:    { perPax: Math.round(actPerPax), total: Math.round(actGroup) },
+      totalPerPax: Math.round(totalPerPax),
+      total: grandTotal,
+    };
   };
 
   const handleAmend = async (dayIdx, itemType, itemIdx) => {
@@ -981,15 +1001,18 @@ export default function App() {
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 md:gap-6 mb-10">
                     <div className="bg-[#DE8170] text-white p-6 rounded-2xl shadow-md">
                       <p className="text-white/80 font-medium mb-1 text-sm flex items-center"><Receipt size={14} className="mr-2" /> Total Expenses</p>
-                      <h3 className="text-3xl font-serif font-bold">RM {getGrandTotal().toLocaleString()}</h3>
+                      <h3 className="text-3xl font-serif font-bold">RM {getExpensesBreakdown().total.toLocaleString()}</h3>
+                      <p className="text-white/60 text-xs mt-1">{numPax} traveler{numPax > 1 ? 's' : ''}</p>
                     </div>
                     <div className="bg-[#8E9F7F] text-white p-6 rounded-2xl shadow-md">
                       <p className="text-white/80 font-medium mb-1 text-sm flex items-center"><Calendar size={14} className="mr-2" /> Per Person</p>
-                      <h3 className="text-3xl font-serif font-bold">RM {splitData?.split_per_person_myr || Math.round(getGrandTotal() / numPax)}</h3>
+                      <h3 className="text-3xl font-serif font-bold">RM {getExpensesBreakdown().totalPerPax.toLocaleString()}</h3>
+                      <p className="text-white/60 text-xs mt-1">Split evenly</p>
                     </div>
                     <div className="bg-[#7D6B5A] text-white p-6 rounded-2xl shadow-md">
                       <p className="text-white/80 font-medium mb-1 text-sm flex items-center"><Plane size={14} className="mr-2" /> Local ({splitData?.destination_currency || 'MYR'})</p>
                       <h3 className="text-3xl font-serif font-bold">{splitData?.split_per_person_local || 0}</h3>
+                      <p className="text-white/60 text-xs mt-1">Per person in local currency</p>
                     </div>
                   </div>
 
@@ -1001,66 +1024,69 @@ export default function App() {
                       </div>
 
                       <div className="space-y-6">
-                        {itinerary.map((day, idx) => {
-                          const hotelCost = (day.hotel?.cost_myr || 0) * numPax;
-                          if (hotelCost > 0 && (!idx || day.hotel?.name !== itinerary[idx - 1]?.hotel?.name)) {
-                            return (
-                              <div key={`h-${idx}`} className="flex justify-between items-start border-b border-gray-100 pb-4">
+                        {(() => {
+                          const b = getExpensesBreakdown();
+                          return (
+                            <>
+                              {flightOptions[selectedFlightIdx] && (
+                                <div className="flex justify-between items-start border-b border-gray-100 pb-4">
+                                  <div>
+                                    <h4 className="font-bold text-gray-800">✈️ Flight Tickets ({flightOptions[selectedFlightIdx].airline})</h4>
+                                    <p className="text-xs text-gray-500 mt-1">{numPax} traveler{numPax > 1 ? 's' : ''}</p>
+                                  </div>
+                                  <div className="text-right">
+                                    <div className="font-bold text-gray-800">RM {b.flight.total.toLocaleString()}</div>
+                                    <div className="text-xs text-gray-400">RM {b.flight.perPax.toLocaleString()}/pax</div>
+                                  </div>
+                                </div>
+                              )}
+
+                              <div className="flex justify-between items-start border-b border-gray-100 pb-4">
                                 <div>
-                                  <h4 className="font-bold text-gray-800">Hotel - {day.hotel?.name || 'Accommodation'}</h4>
-                                  <p className="text-xs text-gray-500 mt-1">Accommodation</p>
+                                  <h4 className="font-bold text-gray-800">🏨 Accommodation</h4>
+                                  <p className="text-xs text-gray-500 mt-1">Room rate (shared)</p>
                                 </div>
                                 <div className="text-right">
-                                  <div className="font-bold text-gray-800">RM {hotelCost}</div>
-                                  <div className="text-xs text-gray-400">RM {day.hotel.cost_myr} each</div>
+                                  <div className="font-bold text-gray-800">RM {b.hotel.total.toLocaleString()}</div>
+                                  <div className="text-xs text-gray-400">RM {b.hotel.perPax.toLocaleString()}/pax</div>
                                 </div>
                               </div>
-                            );
-                          }
-                          return null;
-                        })}
 
-                        {flightOptions[selectedFlightIdx] && (
-                          <div className="flex justify-between items-start border-b border-gray-100 pb-4">
-                            <div>
-                              <h4 className="font-bold text-gray-800">Flight Tickets ({flightOptions[selectedFlightIdx].airline})</h4>
-                              <p className="text-xs text-gray-500 mt-1">Transportation</p>
-                            </div>
-                            <div className="text-right">
-                              <div className="font-bold text-gray-800">RM {flightOptions[selectedFlightIdx].cost_myr * numPax}</div>
-                              <div className="text-xs text-gray-400">RM {flightOptions[selectedFlightIdx].cost_myr} each</div>
-                            </div>
-                          </div>
-                        )}
-
-                        <div className="flex justify-between items-start border-b border-gray-100 pb-4">
-                          <div>
-                            <h4 className="font-bold text-gray-800">Food & Dining</h4>
-                            <p className="text-xs text-gray-500 mt-1">Estimated total</p>
-                          </div>
-                          <div className="text-right">
-                            <div className="font-bold text-gray-800">RM {itinerary.reduce((acc, d) => acc + (d.daily_food_cost_myr || 0), 0) * numPax}</div>
-                            <div className="text-xs text-gray-400">RM {itinerary.reduce((acc, d) => acc + (d.daily_food_cost_myr || 0), 0)} each</div>
-                          </div>
-                        </div>
-
-                        {itinerary.some(d => (d.activities || []).some(a => a.transport_to_next?.estimated_cost_myr > 0)) && (
-                          <div className="flex justify-between items-start border-b border-gray-100 pb-4">
-                            <div>
-                              <h4 className="font-bold text-gray-800">Local Transport</h4>
-                              <p className="text-xs text-gray-500 mt-1">Taxi, Metro, Bus</p>
-                            </div>
-                            <div className="text-right">
-                              <div className="font-bold text-gray-800">
-                                RM {itinerary.reduce((acc, d) => acc + (d.activities || []).reduce((aAcc, a) => aAcc + (a.transport_to_next?.estimated_cost_myr || 0), 0), 0) * numPax}
+                              <div className="flex justify-between items-start border-b border-gray-100 pb-4">
+                                <div>
+                                  <h4 className="font-bold text-gray-800">🍜 Food & Dining</h4>
+                                  <p className="text-xs text-gray-500 mt-1">{numPax} traveler{numPax > 1 ? 's' : ''}</p>
+                                </div>
+                                <div className="text-right">
+                                  <div className="font-bold text-gray-800">RM {b.food.total.toLocaleString()}</div>
+                                  <div className="text-xs text-gray-400">RM {b.food.perPax.toLocaleString()}/pax</div>
+                                </div>
                               </div>
-                              <div className="text-xs text-gray-400">
-                                RM {itinerary.reduce((acc, d) => acc + (d.activities || []).reduce((aAcc, a) => aAcc + (a.transport_to_next?.estimated_cost_myr || 0), 0), 0)} each
-                              </div>
-                            </div>
-                          </div>
-                        )}
 
+                              <div className="flex justify-between items-start border-b border-gray-100 pb-4">
+                                <div>
+                                  <h4 className="font-bold text-gray-800">🚇 Transportation</h4>
+                                  <p className="text-xs text-gray-500 mt-1">Day transport + activity transit</p>
+                                </div>
+                                <div className="text-right">
+                                  <div className="font-bold text-gray-800">RM {b.trans.total.toLocaleString()}</div>
+                                  <div className="text-xs text-gray-400">RM {b.trans.perPax.toLocaleString()}/pax</div>
+                                </div>
+                              </div>
+
+                              <div className="flex justify-between items-start border-b border-gray-100 pb-4">
+                                <div>
+                                  <h4 className="font-bold text-gray-800">🎟️ Activities</h4>
+                                  <p className="text-xs text-gray-500 mt-1">{numPax} traveler{numPax > 1 ? 's' : ''}</p>
+                                </div>
+                                <div className="text-right">
+                                  <div className="font-bold text-gray-800">RM {b.act.total.toLocaleString()}</div>
+                                  <div className="text-xs text-gray-400">RM {b.act.perPax.toLocaleString()}/pax</div>
+                                </div>
+                              </div>
+                            </>
+                          );
+                        })()}
                       </div>
                     </div>
 
@@ -1104,19 +1130,32 @@ export default function App() {
               <div>
                 <h2 className="text-3xl font-serif font-bold text-gray-800 mb-6">Budget Breakdown</h2>
                 <div className="space-y-4 font-sans">
-                  {Object.entries(getExpensesBreakdown()).map(([key, val]) => {
-                    if (key === 'total') return null;
-                    const labels = { flight: '✈️ Flights', hotel: '🏨 Accommodation', food: '🍜 Food & Dining', trans: '🚇 Transportation', act: '🎟️ Activities' };
-                    return (
-                      <div key={key} className="flex justify-between py-2 border-b border-gray-100">
-                        <span className="text-gray-600">{labels[key]}</span>
-                        <span className="font-bold">RM {val.toLocaleString()}</span>
+                  {(() => {
+                    const b = getExpensesBreakdown();
+                    const rows = [
+                      { key: 'flight', label: '✈️ Flights', perPax: b.flight.perPax, total: b.flight.total },
+                      { key: 'hotel', label: '🏨 Accommodation', perPax: b.hotel.perPax, total: b.hotel.total },
+                      { key: 'food', label: '🍜 Food & Dining', perPax: b.food.perPax, total: b.food.total },
+                      { key: 'trans', label: '🚇 Transportation', perPax: b.trans.perPax, total: b.trans.total },
+                      { key: 'act', label: '🎟️ Activities', perPax: b.act.perPax, total: b.act.total },
+                    ];
+                    return rows.map(r => (
+                      <div key={r.key} className="flex justify-between items-center py-2 border-b border-gray-100">
+                        <span className="text-gray-600">{r.label}</span>
+                        <div className="text-right">
+                          <span className="font-bold">RM {r.total.toLocaleString()}</span>
+                          <span className="text-xs text-gray-400 ml-2">(RM {r.perPax.toLocaleString()}/pax)</span>
+                        </div>
                       </div>
-                    );
-                  })}
-                  <div className="flex justify-between py-4 bg-gray-50 px-4 rounded-xl mt-4">
-                    <span className="font-bold text-gray-800">Total (All Travelers)</span>
+                    ));
+                  })()}
+                  <div className="flex justify-between items-center py-4 bg-gray-50 px-4 rounded-xl mt-4">
+                    <span className="font-bold text-gray-800">Total ({numPax} traveler{numPax > 1 ? 's' : ''})</span>
                     <span className="font-bold text-[#DE8170] text-xl">RM {getExpensesBreakdown().total.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-3 bg-[#8E9F7F]/10 px-4 rounded-xl">
+                    <span className="font-bold text-[#8E9F7F]">Per Person</span>
+                    <span className="font-bold text-[#8E9F7F] text-xl">RM {getExpensesBreakdown().totalPerPax.toLocaleString()}</span>
                   </div>
                 </div>
               </div>
