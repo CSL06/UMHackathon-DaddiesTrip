@@ -62,16 +62,33 @@ DaddiesTrip uses a modular **4-Agent Workflow** executed sequentially. Each agen
 
 ---
 
-## 🛠 Setup & Deployment Instructions
+## 🚀 Quick Start (Local Development)
 
-### 1. Install Python Environment
-Ensure you have **Python 3.10+** installed.
+### Prerequisites
+Before you begin, make sure you have the following installed:
+- **Python 3.10+** — [Download](https://www.python.org/downloads/)
+- **Node.js 18+** and **npm** — [Download](https://nodejs.org/)
+- A valid **Ilmu API key** for the LLM backend
+
+---
+
+### Step 1 — Clone the Repository
 ```bash
-pip install -r backend/requirements.txt
+git clone https://github.com/your-username/UMHackathon-DaddiesTrip.git
+cd UMHackathon-DaddiesTrip
 ```
 
-### 2. Configure Environment Variables
-Create a `.env` file in the **root directory** with your LLM API credentials:
+### Step 2 — Configure Environment Variables
+Create a `.env` file in the **root directory** of the project:
+```bash
+# Windows (PowerShell)
+New-Item .env
+
+# macOS / Linux
+touch .env
+```
+
+Then open `.env` and add your credentials:
 ```env
 Z_AI_API_KEY=your_api_key_here
 Z_AI_BASE_URL=https://api.ilmu.ai/v1/chat/completions
@@ -80,26 +97,46 @@ Z_AI_MODEL=glm-4
 
 > The `Z_AI_BASE_URL` accepts either the base URL (`https://api.ilmu.ai/v1`) or the full completions endpoint — the server normalizes it automatically.
 
-### 3. Start the Backend (FastAPI)
-Run from the **root directory** of the project:
+### Step 3 — Install Python Dependencies
+Run this from the **root directory**:
 ```bash
-uvicorn backend.main:app --reload
+python -m pip install -r requirements.txt
 ```
-The API will be available at `http://localhost:8000`.
 
-### 4. Start the Frontend (Vite + React)
-In a separate terminal, navigate to the `frontend` directory:
+### Step 4 — Start the Backend (FastAPI)
+Run this from the **root directory** in **Terminal 1**:
+```bash
+python -m uvicorn backend.main:app --reload
+```
+The backend API will be live at **`http://localhost:8000`**.  
+You can verify it works by visiting `http://localhost:8000/api/health` — it should return `{"status": "ok"}`.
+
+### Step 5 — Start the Frontend (Vite + React)
+Open a **new terminal (Terminal 2)**, then run:
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
+The frontend dev server will start at **`http://localhost:5173`**.
 
-### 5. Access the Application
-Open your browser and navigate to the Vite dev server:
+### Step 6 — Open the App
+Open your browser and go to:
 ```
 http://localhost:5173
 ```
+The Vite dev server automatically proxies all `/api/` requests to the FastAPI backend at port `8000`, so both work seamlessly together.
+
+---
+
+### 🔧 Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| `ModuleNotFoundError: No module named 'backend'` | Make sure you run `uvicorn` from the **root directory**, not inside `backend/` |
+| `401 Unauthorized` from the API | Your `Z_AI_API_KEY` in `.env` may be invalid or expired — get a new one from the Ilmu dashboard |
+| Frontend shows "Unable to connect to the server" | Ensure the backend is running on port `8000` before starting the frontend |
+| `npm install` fails | Make sure you are inside the `frontend/` directory when running the command |
 
 ---
 

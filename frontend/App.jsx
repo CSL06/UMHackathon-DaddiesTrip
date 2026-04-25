@@ -526,10 +526,10 @@ export default function App() {
         <div className="text-[#DE8170] mb-2">
           <Plane size={48} strokeWidth={1.5} />
         </div>
-        <h1 className="text-6xl font-bold tracking-tight text-[#3A332C] mb-4">
+        <h1 className="text-4xl md:text-6xl font-bold tracking-tight text-[#3A332C] mb-4 text-center">
           DaddiesTrip
         </h1>
-        <p className="text-xl text-gray-500 font-sans tracking-wide">
+        <p className="text-lg md:text-xl text-gray-500 font-sans tracking-wide text-center px-4">
           Your AI-powered travel orchestration companion
         </p>
       </header>
@@ -577,11 +577,11 @@ export default function App() {
       </div>
 
       {/* NAVIGATION TABS */}
-      <div className="flex justify-center mb-12">
-        <div className="bg-white rounded-full p-2 shadow-sm flex space-x-2 border border-gray-100">
+      <div className="flex justify-center mb-8 md:mb-12 px-4 w-full">
+        <div className="bg-white rounded-3xl md:rounded-full p-2 shadow-sm flex flex-col sm:flex-row gap-2 border border-gray-100 w-full sm:w-auto">
           <button
             onClick={() => setActiveTab('plan')}
-            className={`flex items-center px-8 py-3 rounded-full transition-all font-sans font-medium ${activeTab === 'plan'
+            className={`flex items-center justify-center px-6 md:px-8 py-3 rounded-full transition-all font-sans font-medium ${activeTab === 'plan'
               ? 'bg-[#DE8170] text-white shadow-md'
               : 'text-gray-600 hover:bg-gray-50'
               }`}
@@ -591,7 +591,7 @@ export default function App() {
           </button>
           <button
             onClick={() => setActiveTab('itinerary')}
-            className={`flex items-center px-8 py-3 rounded-full transition-all font-sans font-medium ${activeTab === 'itinerary'
+            className={`flex items-center justify-center px-6 md:px-8 py-3 rounded-full transition-all font-sans font-medium ${activeTab === 'itinerary'
               ? 'bg-[#DE8170] text-white shadow-md'
               : 'text-gray-600 hover:bg-gray-50'
               }`}
@@ -601,7 +601,7 @@ export default function App() {
           </button>
           <button
             onClick={() => setActiveTab('expenses')}
-            className={`flex items-center px-8 py-3 rounded-full transition-all font-sans font-medium ${activeTab === 'expenses'
+            className={`flex items-center justify-center px-6 md:px-8 py-3 rounded-full transition-all font-sans font-medium ${activeTab === 'expenses'
               ? 'bg-[#DE8170] text-white shadow-md'
               : 'text-gray-600 hover:bg-gray-50'
               }`}
@@ -613,14 +613,14 @@ export default function App() {
       </div>
 
       {/* MAIN CONTENT AREA */}
-      <main className="max-w-4xl mx-auto px-6 pb-24">
-        <div className="bg-white rounded-[2rem] shadow-sm border border-gray-100 p-8 min-h-[400px]">
+      <main className="max-w-4xl mx-auto px-4 sm:px-6 pb-24">
+        <div className="bg-white rounded-[2rem] shadow-sm border border-gray-100 p-5 sm:p-8 min-h-[400px]">
 
           {/* PLAN TRIP TAB */}
           {activeTab === 'plan' && (
             <div className="flex flex-col h-full font-sans">
-              <div className="flex items-start mb-6">
-                <div className="bg-[#DE8170] text-white p-3 rounded-full mr-4 shadow-sm flex-shrink-0">
+              <div className="flex flex-col sm:flex-row items-start mb-6">
+                <div className="bg-[#DE8170] text-white p-3 rounded-full mb-3 sm:mb-0 sm:mr-4 shadow-sm flex-shrink-0 self-start">
                   <Plane size={24} />
                 </div>
                 <div className="bg-[#FAF6F0] rounded-2xl rounded-tl-none p-6 text-gray-700 text-lg leading-relaxed shadow-sm border border-gray-100 max-w-2xl">
@@ -686,7 +686,7 @@ export default function App() {
                   {flightOptions.length > 0 && (
                     <>
                       <h3 className="text-xl font-bold text-gray-800 mb-4 px-2">Flight Options</h3>
-                      <div className="grid grid-cols-2 gap-6 mb-10">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10">
                         {flightOptions.map((opt, i) => {
                           const dep = opt.departure || {};
                           const ret = opt.return || {};
@@ -854,7 +854,7 @@ export default function App() {
                           )}
                         </div>
 
-                        <div className="ml-4 mt-6 flex gap-4">
+                        <div className="ml-4 mt-6 flex flex-col sm:flex-row gap-4">
                           <div className="flex-1 bg-gray-50 rounded-xl p-4 border border-gray-100">
                             <div className="flex items-center gap-2 mb-1">
                               <h5 className="font-bold text-gray-800 text-sm">🏨 Stay</h5>
@@ -967,7 +967,7 @@ export default function App() {
                 </div>
               ) : (
                 <>
-                  <div className="grid grid-cols-3 gap-6 mb-10">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 md:gap-6 mb-10">
                     <div className="bg-[#DE8170] text-white p-6 rounded-2xl shadow-md">
                       <p className="text-white/80 font-medium mb-1 text-sm flex items-center"><Receipt size={14} className="mr-2" /> Total Expenses</p>
                       <h3 className="text-3xl font-serif font-bold">RM {getGrandTotal().toLocaleString()}</h3>
@@ -982,7 +982,7 @@ export default function App() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-12">
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12">
                     {/* Expenses List */}
                     <div>
                       <div className="flex justify-between items-center mb-6">
@@ -1082,13 +1082,13 @@ export default function App() {
 
       {/* Settlement Modal */}
       {showBudgetModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] flex items-center justify-center p-6">
-          <div className="bg-white rounded-[2.5rem] shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto p-10 relative">
-            <button onClick={() => setShowBudgetModal(false)} className="absolute top-6 right-6 text-gray-400 hover:text-gray-600">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] flex items-center justify-center p-4 sm:p-6">
+          <div className="bg-white rounded-[2rem] sm:rounded-[2.5rem] shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto p-6 sm:p-10 relative">
+            <button onClick={() => setShowBudgetModal(false)} className="absolute top-4 right-4 sm:top-6 sm:right-6 text-gray-400 hover:text-gray-600">
               <X size={24} />
             </button>
 
-            <div className="grid grid-cols-2 gap-12">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12">
               {/* Breakdown Table */}
               <div>
                 <h2 className="text-3xl font-serif font-bold text-gray-800 mb-6">Budget Breakdown</h2>
