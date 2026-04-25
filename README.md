@@ -28,7 +28,7 @@
 
 ## Table of Contents
 
-- [Overview](#overview)
+- [Overview and Pitching Video](#overview)
 - [Problem Statement](#problem-statement)
 - [Key Features](#key-features)
 - [System Architecture](#system-architecture)
@@ -55,6 +55,8 @@
 **DaddiesTrip** is a full-stack AI travel planning platform that automates the entire lifecycle of group travel — from a single natural language prompt to a complete, actionable itinerary with real flight options, hotel recommendations, activity scheduling, and precise multi-currency expense splitting.
 
 Built for the **UM Hackathon 2026**, the platform eliminates the need to juggle multiple apps for itinerary drafting, flight bookings, map routing, and manual spreadsheet calculations for cost splitting.
+
+Our Pitching Video Link: https://drive.google.com/file/d/12WuleL763Vm7ihAdAy4SwdbWTUnHG6j3/view?usp=drive_link
 
 ## Problem Statement
 
